@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "primitives",
+    "guest",
+    "host"
+]
+resolver = "3"
