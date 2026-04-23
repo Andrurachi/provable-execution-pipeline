@@ -46,39 +46,62 @@ pub enum ExecutionError {
 }
 
 impl GuestInput {
-    /// The entry point for the zkVM guest to verify the execution.
-    pub fn verify(&self) -> Result<(), ExecutionError> {
+    /// Ensure the witness is structurally correct
+    pub fn validate(&self) -> Result<(), ExecutionError> {
+        for tx in &self.payload.txs {
+            // Validate sender exists
+            if !self.state_witness.contains_key(&tx.from) {
+                return Err(ExecutionError::SenderNotFound);
+            }
+            // Validate receiver exists
+            if !self.state_witness.contains_key(&tx.to) {
+                return Err(ExecutionError::ReceiverNotFound);
+            }
+        }
+        Ok(())
+    }
+
+    /// The State Transition Function
+    /// Takes the pre-state and applies the transactions.
+    pub fn replay(&self) -> Result<StateWitness, ExecutionError> {
         // Create a mutable working state from the pre-state witness
         let mut working_state = self.state_witness.clone();
 
         // Execute the payload
         for tx in &self.payload.txs {
-            // Validate sender exists and get mutable reference
-            let sender_account = working_state
-                .get_mut(&tx.from)
-                .ok_or(ExecutionError::SenderNotFound)?;
+            // validate() guaranteed sender exists
+            let sender = working_state.get_mut(&tx.from).unwrap();
 
             // Check sufficient balance
-            if sender_account.balance < tx.amount {
+            if sender.balance < tx.amount {
                 return Err(ExecutionError::InsufficientBalance);
             }
 
             // Deduct from sender
-            sender_account.balance -= tx.amount;
+            sender.balance -= tx.amount;
 
-            // Validate receiver exists
-            let receiver_account = working_state
-                .get_mut(&tx.to)
-                .ok_or(ExecutionError::ReceiverNotFound)?;
+            // validate() guaranteed receiver exists
+            let receiver = working_state.get_mut(&tx.to).unwrap();
 
             // Add to receiver safely (preventing overflow panics)
-            receiver_account.balance = receiver_account.balance
+            receiver.balance = receiver.balance
                 .checked_add(tx.amount)
-                .expect("Balance overflow"); 
+                .expect("Balance overflow");
         }
 
-        // Verify the final working state matches the claimed expected_post_state
-        if working_state != self.expected_post_state {
+        Ok(working_state)
+    }
+
+    /// Orchestrates validation and replay, then checks against the expected outcome.
+    pub fn verify(&self) -> Result<(), ExecutionError> {
+        // Validate structural integrity
+        self.validate()?;
+
+        // Replay the execution to get the resulting state
+        let computed_state = self.replay()?;
+
+        // Compare computed state with the claimed post-state
+        if computed_state != self.expected_post_state {
             return Err(ExecutionError::PostStateMismatch);
         }
 
