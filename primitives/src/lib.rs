@@ -44,3 +44,44 @@ pub enum ExecutionError {
     InsufficientBalance,
     PostStateMismatch,
 }
+
+impl GuestInput {
+    /// The entry point for the zkVM guest to verify the execution.
+    pub fn verify(&self) -> Result<(), ExecutionError> {
+        // Create a mutable working state from the pre-state witness
+        let mut working_state = self.state_witness.clone();
+
+        // Execute the payload
+        for tx in &self.payload.txs {
+            // Validate sender exists and get mutable reference
+            let sender_account = working_state
+                .get_mut(&tx.from)
+                .ok_or(ExecutionError::SenderNotFound)?;
+
+            // Check sufficient balance
+            if sender_account.balance < tx.amount {
+                return Err(ExecutionError::InsufficientBalance);
+            }
+
+            // Deduct from sender
+            sender_account.balance -= tx.amount;
+
+            // Validate receiver exists
+            let receiver_account = working_state
+                .get_mut(&tx.to)
+                .ok_or(ExecutionError::ReceiverNotFound)?;
+
+            // Add to receiver safely (preventing overflow panics)
+            receiver_account.balance = receiver_account.balance
+                .checked_add(tx.amount)
+                .expect("Balance overflow"); 
+        }
+
+        // Verify the final working state matches the claimed expected_post_state
+        if working_state != self.expected_post_state {
+            return Err(ExecutionError::PostStateMismatch);
+        }
+
+        Ok(())
+    }
+}
