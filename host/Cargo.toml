@@ -4,3 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Contains the Prover, the Verifier, and the crypto libraries
+sp1-sdk = "6.0.0"
+
+primitives = { path = "../primitives" }
+tokio = { version = "1.0", features = ["full"] }
+hex = "0.4"
+
+[build-dependencies]
+# Compiles the guest crate into a RISC-V binary before the host builds
+sp1-build = "6.0.0"
