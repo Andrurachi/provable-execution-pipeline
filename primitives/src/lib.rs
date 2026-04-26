@@ -34,7 +34,6 @@ pub struct ExecutionPayload {
 pub struct GuestInput {
     pub state_witness: StateWitness,
     pub payload: ExecutionPayload,
-    pub expected_post_state: StateWitness,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,7 +41,6 @@ pub enum ExecutionError {
     SenderNotFound,
     ReceiverNotFound,
     InsufficientBalance,
-    PostStateMismatch,
 }
 
 impl GuestInput {
@@ -92,20 +90,13 @@ impl GuestInput {
         Ok(working_state)
     }
 
-    /// Orchestrates validation and replay, then checks against the expected outcome.
-    pub fn verify(&self) -> Result<(), ExecutionError> {
+    /// Orchestrates validation and replay
+    /// Returns the newly computed post-state
+    pub fn execute(&self) -> Result<StateWitness, ExecutionError> {
         // Validate structural integrity
         self.validate()?;
-
         // Replay the execution to get the resulting state
-        let computed_state = self.replay()?;
-
-        // Compare computed state with the claimed post-state
-        if computed_state != self.expected_post_state {
-            return Err(ExecutionError::PostStateMismatch);
-        }
-
-        Ok(())
+        self.replay()
     }
 }
 
@@ -121,8 +112,9 @@ mod tests {
         addr
     }
 
-    // Helper to set up a valid base input
-    fn setup_valid_input() -> GuestInput {
+    // Helper to set up a valid base input. 
+    // Returns the input and the expected outcome
+    fn setup_valid_input() -> (GuestInput, StateWitness) {
         let alice = mock_addr(1);
         let bob = mock_addr(2);
 
@@ -140,54 +132,46 @@ mod tests {
         expected_post_state.insert(alice, Account { balance: 90 });
         expected_post_state.insert(bob, Account { balance: 60 });
 
-        GuestInput {
+        let input = GuestInput {
             state_witness,
             payload: ExecutionPayload { txs: vec![tx] },
-            expected_post_state,
-        }
+        };
+
+        (input, expected_post_state)
     }
 
     #[test]
     fn test_valid_execution() {
-        let input = setup_valid_input();
-        assert_eq!(input.verify(), Ok(()));
+        let (input, expected_state) = setup_valid_input();
+        // Asserts that the STF successfully computed the expected state
+        assert_eq!(input.execute(), Ok(expected_state));
     }
 
     #[test]
     fn test_fail_missing_receiver() {
-        let mut input = setup_valid_input();
+        let (mut input, _) = setup_valid_input();
         // Change tx destination to an unknown address
         input.payload.txs[0].to = mock_addr(99); 
         
-        assert_eq!(input.verify(), Err(ExecutionError::ReceiverNotFound));
+        assert_eq!(input.execute(), Err(ExecutionError::ReceiverNotFound));
     }
 
     #[test]
     fn test_fail_insufficient_balance() {
-        let mut input = setup_valid_input();
+        let (mut input, _) = setup_valid_input();
         // Alice only has 100, try to send 200
         input.payload.txs[0].amount = 200; 
         
-        assert_eq!(input.verify(), Err(ExecutionError::InsufficientBalance));
-    }
-
-    #[test]
-    fn test_fail_incorrect_post_state() {
-        let mut input = setup_valid_input();
-        // Tamper with the expected post state (attacker claims Bob gets 100)
-        let bob = mock_addr(2);
-        input.expected_post_state.get_mut(&bob).unwrap().balance = 100;
-        
-        assert_eq!(input.verify(), Err(ExecutionError::PostStateMismatch));
+        assert_eq!(input.execute(), Err(ExecutionError::InsufficientBalance));
     }
 
     #[test]
     fn test_fail_tampered_witness_missing_sender() {
-        let mut input = setup_valid_input();
+        let (mut input, _) = setup_valid_input();
         let alice = mock_addr(1);
         // Remove sender from the witness
         input.state_witness.remove(&alice); 
         
-        assert_eq!(input.verify(), Err(ExecutionError::SenderNotFound));
+        assert_eq!(input.execute(), Err(ExecutionError::SenderNotFound));
     }
 }

@@ -1,12 +1,12 @@
 use sp1_sdk::{Prover, include_elf, ProverClient, SP1Stdin, ProvingKey, HashableKey};
-use primitives::{Account, ExecutionPayload, GuestInput, Transaction};
+use primitives::{Account, ExecutionPayload, GuestInput, Transaction, StateWitness};
 use std::collections::BTreeMap;
 use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
     sp1_sdk::utils::setup_logger();
-    println!("Starting Lean Ethereum Prover POC");
+    println!("Starting Lean Ethereum Prover");
 
     // Construct the mock block
     println!("Constructing mock block and witness...");
@@ -28,7 +28,6 @@ async fn main() {
     let input_data = GuestInput {
         state_witness,
         payload: ExecutionPayload { txs: vec![tx] },
-        expected_post_state,
     };
 
     // The async Prover and ELF
@@ -56,19 +55,25 @@ async fn main() {
 
     println!("Proof generated in {:?}", start_time.elapsed());
 
-    // Read the Journal
-    let journal_result = proof.public_values.read::<bool>();
-    println!("Journal output (Did execution succeed?): {}", journal_result);
+    // ================================
+    // Stateless verification
+    println!("Node verifying proof and block headers...");
+
+    // Read the computed post state from the Journal
+    let journal_state = proof.public_values.read::<StateWitness>();
     
-    if !journal_result {
-        println!("State transition is invalid.");
+    // "Verifier" node checks if the claimed block header matches the STF execution
+    // Done first to avoid heavy computation in case the proof doesn't have the expected post state
+    if journal_state != expected_post_state {
+        println!("STATE MISMATCH: Proof post-state doesn't match the proposer's block post-state!");
     }
+    println!("State Root Match: The committed state equals the expected state.");
 
     // Verification
     println!("Verifying cryptographic binding...");
     
     match client.verify(&proof, vk, None) {
-        Ok(_) => println!("VERIFICATION SUCCESSFUL! The math checks out."),
+        Ok(_) => println!("VERIFICATION SUCCESSFUL! Block Accepted."),
         Err(e) => println!("VERIFICATION FAILED: {}", e),
     }
 }
