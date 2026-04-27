@@ -1,7 +1,7 @@
 // main fn will be called by sp1, not an operating system
 #![no_main]
 
-// Defines the entry point of the zkVM  
+// Defines the entry point of the zkVM
 sp1_zkvm::entrypoint!(main);
 
 use primitives::GuestInput;

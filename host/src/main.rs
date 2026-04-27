@@ -1,5 +1,5 @@
-use sp1_sdk::{Prover, include_elf, ProverClient, SP1Stdin, ProvingKey, HashableKey};
-use primitives::{Account, ExecutionPayload, GuestInput, Transaction, StateWitness};
+use primitives::{Account, ExecutionPayload, GuestInput, StateWitness, Transaction};
+use sp1_sdk::{HashableKey, Prover, ProverClient, ProvingKey, SP1Stdin, include_elf};
 use std::collections::BTreeMap;
 use std::time::Instant;
 
@@ -10,15 +10,21 @@ async fn main() {
 
     // Construct the mock block
     println!("Constructing mock block and witness...");
-    
-    let mut alice = [0u8; 20]; alice[19] = 1;
-    let mut bob = [0u8; 20]; bob[19] = 2;
+
+    let mut alice = [0u8; 20];
+    alice[19] = 1;
+    let mut bob = [0u8; 20];
+    bob[19] = 2;
 
     let mut state_witness = BTreeMap::new();
     state_witness.insert(alice, Account { balance: 100 });
     state_witness.insert(bob, Account { balance: 50 });
 
-    let tx = Transaction { from: alice, to: bob, amount: 10 };
+    let tx = Transaction {
+        from: alice,
+        to: bob,
+        amount: 10,
+    };
 
     // Block proposed for that slot
     let mut expected_post_state = BTreeMap::new();
@@ -47,16 +53,16 @@ async fn main() {
     // Execution and Proving
     println!("Generating core STARK proof...");
     let start_time = Instant::now();
-    
+
     let mut proof = client
         .prove(&pk, stdin)
         .await
         .expect("Failed to generate proof");
 
-    // // To deploy this proof to Ethereum L1, the STARK must be wrapped into a 
+    // // To deploy this proof to Ethereum L1, the STARK must be wrapped into a
     // // KZG Plonk SNARK. This allows cheap gas verification,
     // // but this SNARK wrapping requires a lot of RAM.
-    
+
     // let mut proof = client
     //     .prove(&pk, stdin)
     //     .plonk()
@@ -71,7 +77,7 @@ async fn main() {
 
     // Read the computed post state from the Journal
     let journal_state = proof.public_values.read::<StateWitness>();
-    
+
     // "Verifier" node checks if the claimed block header matches the STF execution
     // Done first to avoid heavy computation in case the proof doesn't have the expected post state
     if journal_state != expected_post_state {
@@ -81,7 +87,7 @@ async fn main() {
 
     // Verification
     println!("Verifying cryptographic binding...");
-    
+
     match client.verify(&proof, vk, None) {
         Ok(_) => println!("VERIFICATION SUCCESSFUL! Block Accepted."),
         Err(e) => println!("VERIFICATION FAILED: {}", e),

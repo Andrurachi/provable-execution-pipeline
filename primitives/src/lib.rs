@@ -82,7 +82,8 @@ impl GuestInput {
             let receiver = working_state.get_mut(&tx.to).unwrap();
 
             // Add to receiver safely (preventing overflow panics)
-            receiver.balance = receiver.balance
+            receiver.balance = receiver
+                .balance
                 .checked_add(tx.amount)
                 .expect("Balance overflow");
         }
@@ -112,7 +113,7 @@ mod tests {
         addr
     }
 
-    // Helper to set up a valid base input. 
+    // Helper to set up a valid base input.
     // Returns the input and the expected outcome
     fn setup_valid_input() -> (GuestInput, StateWitness) {
         let alice = mock_addr(1);
@@ -151,8 +152,8 @@ mod tests {
     fn test_fail_missing_receiver() {
         let (mut input, _) = setup_valid_input();
         // Change tx destination to an unknown address
-        input.payload.txs[0].to = mock_addr(99); 
-        
+        input.payload.txs[0].to = mock_addr(99);
+
         assert_eq!(input.execute(), Err(ExecutionError::ReceiverNotFound));
     }
 
@@ -160,8 +161,8 @@ mod tests {
     fn test_fail_insufficient_balance() {
         let (mut input, _) = setup_valid_input();
         // Alice only has 100, try to send 200
-        input.payload.txs[0].amount = 200; 
-        
+        input.payload.txs[0].amount = 200;
+
         assert_eq!(input.execute(), Err(ExecutionError::InsufficientBalance));
     }
 
@@ -170,8 +171,8 @@ mod tests {
         let (mut input, _) = setup_valid_input();
         let alice = mock_addr(1);
         // Remove sender from the witness
-        input.state_witness.remove(&alice); 
-        
+        input.state_witness.remove(&alice);
+
         assert_eq!(input.execute(), Err(ExecutionError::SenderNotFound));
     }
 }
