@@ -53,6 +53,16 @@ async fn main() {
         .await
         .expect("Failed to generate proof");
 
+    // // To deploy this proof to Ethereum L1, the STARK must be wrapped into a 
+    // // KZG Plonk SNARK. This allows cheap gas verification,
+    // // but this SNARK wrapping requires a lot of RAM.
+    
+    // let mut proof = client
+    //     .prove(&pk, stdin)
+    //     .plonk()
+    //     .await
+    //     .expect("Failed to generate Plonk proof");
+
     println!("Proof generated in {:?}", start_time.elapsed());
 
     // ================================
